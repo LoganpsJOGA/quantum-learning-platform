@@ -1,0 +1,120 @@
+// data/lessons.js
+
+export const lessons = [
+  {
+    id: "bit-vs-qubit",
+    title: "Lesson 1: Bit vs Qubit",
+    level: "Beginner",
+    content: `
+A classical **bit** can be 0 or 1. That's it.
+
+A **qubit** is different: it can be 0, 1, or a *superposition* of both at once.
+
+You can think of it like this:
+
+- Bit  => coin lying flat: HEADS **or** TAILS.
+- Qubit => coin spinning: it's sort of both, until you stop it.
+
+Mathematically, we write a qubit as:
+
+|ψ> = a|0> + b|1>
+
+where a and b are complex numbers and |a|² + |b|² = 1.
+
+When you measure a qubit:
+
+- You see 0 with probability |a|²
+- You see 1 with probability |b|²
+
+But before measurement, it's in that mixed, “both at once” state we call superposition.
+    `,
+  },
+  {
+    id: "superposition",
+    title: "Lesson 2: Superposition",
+    level: "Beginner",
+    content: `
+**Superposition** is the ability of a qubit to be in a combination of 0 and 1.
+
+If we apply a Hadamard gate (H) to |0>, we get:
+
+|ψ> = (|0> + |1>) / √2
+
+This means:
+
+- P(0) = 1/2
+- P(1) = 1/2
+
+Key idea: superposition lets a quantum computer explore many possibilities *at the same time* instead of checking them one by one.
+    `,
+  },
+  {
+    id: "measurement",
+    title: "Lesson 3: Measurement",
+    level: "Beginner",
+    content: `
+Measurement turns a fuzzy quantum state into a definite classical value.
+
+Example: if a qubit is in state
+
+|ψ> = (|0> + |1>) / √2
+
+and we measure it in the standard basis, then:
+
+- We get 0 with probability 1/2
+- We get 1 with probability 1/2
+
+After measurement, the qubit is no longer in superposition. It “collapses”:
+
+- If we saw 0, the qubit becomes |0>
+- If we saw 1, the qubit becomes |1>
+
+Quantum algorithms carefully control **when** measurement happens so they can use superposition and interference first, then read out useful answers at the end.
+    `,
+  },
+  {
+    id: "entanglement",
+    title: "Lesson 4: Entanglement",
+    level: "Intermediate",
+    content: `
+**Entanglement** is a special kind of correlation between qubits that has no classical analog.
+
+Example: the 2-qubit Bell state
+
+|Φ⁺> = (|00> + |11>) / √2
+
+If we measure the first qubit:
+
+- With probability 1/2, we get 0 and the state becomes |00>
+- With probability 1/2, we get 1 and the state becomes |11>
+
+Either way, the two qubits always match. If the first is 0, the second is 0. If the first is 1, the second is 1.
+
+This correlation is stronger than anything possible with classical random variables and is a key resource for quantum computing and quantum communication.
+    `,
+  },
+  {
+    id: "first-circuit",
+    title: "Lesson 5: Your First Quantum Circuit",
+    level: "Beginner",
+    content: `
+Let’s describe a simple 1-qubit circuit:
+
+1. Start in |0>
+2. Apply a Hadamard gate (H)
+3. Measure
+
+In circuit form:
+
+|0> ── H ── ⟶ measure
+
+After the H gate, the state is (|0> + |1>) / √2, so measurement gives:
+
+- 0 with probability 1/2
+- 1 with probability 1/2
+
+In the playground, this will be one of the first circuits you run on a simulator and, eventually, on real quantum hardware.
+    `,
+  },
+];
+
