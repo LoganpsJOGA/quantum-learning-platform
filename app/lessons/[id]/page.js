@@ -2,184 +2,169 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { lessons } from "../../../src/data/lessons";
-import TopNav from "../../TopNav";
 
 export default function LessonPage() {
   const params = useParams();
   const router = useRouter();
+  const id = params?.id;
 
-  // params.id can be string | string[] | undefined
-  let id = "";
-  if (typeof params.id === "string") {
-    id = params.id;
-  } else if (Array.isArray(params.id) && params.id.length > 0) {
-    id = params.id[0];
-  }
+  const lesson = useMemo(
+    () => lessons.find((l) => l.id === id),
+    [id]
+  );
 
-  const lesson = lessons.find((l) => l.id === id);
-
-  // 🔍 If we can't find the lesson, show a debug page instead of a silent 404
   if (!lesson) {
     return (
-      <>
-        <TopNav />
-        <main className="max-w-3xl mx-auto px-4 py-10 text-gray-100">
-          <h1 className="text-2xl font-semibold mb-4">
-            Debug: lesson not found
-          </h1>
-
-          <p className="mb-4">
-            Requested id:{" "}
-            <code className="bg-slate-900 px-2 py-1 rounded">{id}</code>
+      <main className="min-h-screen bg-slate-950 text-slate-100">
+        <div className="max-w-4xl mx-auto px-4 py-12 space-y-6">
+          <h1 className="text-2xl font-semibold">Debug: lesson not found</h1>
+          <p className="text-sm text-slate-400">
+            Requested id: <span className="font-mono">{String(id)}</span>
           </p>
+          <p className="text-sm text-slate-400">Known lesson IDs:</p>
+          <div className="mt-2 rounded-xl bg-slate-900 border border-slate-800 p-4 text-xs font-mono space-y-1 max-h-[50vh] overflow-auto">
+            {lessons.map((l) => (
+              <div key={l.id}>{l.id}</div>
+            ))}
+          </div>
 
-          <p className="mb-2 font-semibold">Known lesson IDs:</p>
-          <pre className="bg-slate-900/70 rounded-lg p-3 text-xs overflow-x-auto">
-            {lessons.map((l) => l.id).join("\n")}
-          </pre>
-
-          <div className="mt-6 flex gap-3">
+          <div className="flex gap-3">
             <button
-              type="button"
               onClick={() => router.back()}
-              className="text-xs px-3 py-1 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800/70"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 text-xs hover:bg-slate-700"
             >
-              ⬅ Back
+              ← Back
             </button>
-
             <Link
               href="/lessons"
-              className="text-sm text-indigo-300 hover:text-indigo-100"
+              className="px-3 py-1.5 rounded-xl bg-slate-900 text-xs border border-slate-700 hover:border-purple-500"
             >
-              ← Back to all lessons
+              All lessons
             </Link>
-
             <Link
               href="/"
-              className="text-xs px-3 py-1 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800/70"
+              className="px-3 py-1.5 rounded-xl bg-slate-900 text-xs border border-slate-700 hover:border-purple-500"
             >
-              ⬅ Return to main menu
+              Return to main menu
             </Link>
           </div>
-        </main>
-      </>
+        </div>
+      </main>
     );
   }
 
-  const index = lessons.findIndex((l) => l.id === id);
-  const prevLesson = index > 0 ? lessons[index - 1] : null;
-  const nextLesson = index < lessons.length - 1 ? lessons[index + 1] : null;
+  const currentIndex = lessons.findIndex((l) => l.id === lesson.id);
+  const prevLesson = currentIndex > 0 ? lessons[currentIndex - 1] : null;
+  const nextLesson =
+    currentIndex < lessons.length - 1 ? lessons[currentIndex + 1] : null;
 
   return (
-    <>
-      <TopNav />
-
-      <main className="max-w-3xl mx-auto px-4 py-10 text-gray-100">
-        {/* Top nav row: back / main menu / browser-back */}
-        <div className="flex items-center justify-between mb-6 gap-3">
-          <div className="flex items-center gap-3 flex-wrap">
+    <main className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
+        {/* Top nav row */}
+        <div className="flex justify-between items-center gap-4">
+          <div className="flex gap-2">
+            <button
+              onClick={() => router.back()}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 text-xs hover:bg-slate-700"
+            >
+              ← Back
+            </button>
             <Link
               href="/lessons"
-              className="text-sm text-indigo-300 hover:text-indigo-100"
+              className="px-3 py-1.5 rounded-xl bg-slate-900 text-xs border border-slate-700 hover:border-purple-500"
             >
-              ← Back to all lessons
+              All lessons
             </Link>
-
             <Link
               href="/"
-              className="text-xs px-3 py-1 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800/70"
+              className="px-3 py-1.5 rounded-xl bg-slate-900 text-xs border border-slate-700 hover:border-purple-500"
             >
-              ⬅ Return to main menu
+              Return to main menu
             </Link>
-
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="text-xs px-3 py-1 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800/70"
-            >
-              ⬅ Back
-            </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-400 flex-wrap justify-end">
-            {lesson.level && (
-              <span className="px-2 py-1 rounded-full bg-slate-800/80 border border-slate-700">
-                Level: {lesson.level}
-              </span>
-            )}
-
+          <div className="flex gap-2">
             {lesson.preset && (
               <Link
                 href={`/playground?preset=${encodeURIComponent(
                   lesson.preset
-                )}`}
-                className="px-3 py-1 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
+                )}&from=${encodeURIComponent(lesson.id)}`}
+                className="px-4 py-2 rounded-2xl bg-emerald-600 text-sm font-semibold text-emerald-50 shadow-sm hover:bg-emerald-500 transition"
               >
-                🔬 Try in Playground
+                🎮 Try in Playground
               </Link>
             )}
+            <Link
+              href={`/lessons/${lesson.id}/quiz`}
+              className="px-4 py-2 rounded-2xl bg-purple-600 text-sm font-semibold text-white shadow-sm hover:bg-purple-500 transition"
+            >
+              🧠 Take quiz
+            </Link>
           </div>
         </div>
 
-        {/* Lesson title + tags */}
-        <h1 className="text-3xl font-bold mb-2">{lesson.title}</h1>
+        {/* Lesson card itself */}
+        <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-md shadow-slate-900/50">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-1">
+            Lesson {lesson.number ?? "?"}
+          </p>
+          <h1 className="text-2xl font-semibold mb-1">{lesson.title}</h1>
+          <p className="text-xs text-slate-400 mb-4">
+            Level: {lesson.level || "Unknown"}
+          </p>
 
-        {lesson.tags && lesson.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-6 text-xs">
-            {lesson.tags.map((tag) => (
-              <span
-                key={tag}
-                className="px-2 py-1 rounded-full bg-slate-800 text-slate-300"
-              >
-                #{tag}
-              </span>
-            ))}
+          {lesson.tags?.length ? (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {lesson.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-300 border border-slate-700"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="prose prose-invert prose-sm max-w-none">
+            {lesson.content
+              .split("\n")
+              .filter((line) => line.trim().length > 0)
+              .map((line, idx) => (
+                <p key={idx} className="mb-2">
+                  {line}
+                </p>
+              ))}
           </div>
-        )}
-
-        {/* Lesson content */}
-        <article className="prose prose-invert max-w-none">
-          {lesson.content.split("\n").map((line, idx) =>
-            line.trim() === "" ? (
-              <br key={idx} />
-            ) : (
-              <p key={idx}>{line}</p>
-            )
-          )}
         </article>
 
-        {/* Bottom nav row: previous / next / playground shortcut */}
-        <div className="mt-10 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex gap-3 flex-wrap">
+        {/* Bottom navigation between lessons */}
+        <div className="flex justify-between items-center pt-2">
+          <div>
             {prevLesson && (
               <Link
                 href={`/lessons/${prevLesson.id}`}
-                className="inline-flex items-center text-sm text-indigo-300 hover:text-indigo-100"
+                className="px-3 py-1.5 rounded-xl bg-slate-800 text-xs hover:bg-slate-700"
               >
-                ← Previous lesson
-              </Link>
-            )}
-            {nextLesson && (
-              <Link
-                href={`/lessons/${nextLesson.id}`}
-                className="inline-flex items-center text-sm text-indigo-300 hover:text-indigo-100"
-              >
-                Next lesson →
+                ← Previous: {prevLesson.title}
               </Link>
             )}
           </div>
-
-          <Link
-            href={`/playground?preset=${encodeURIComponent(
-              lesson.preset || ""
-            )}`}
-            className="inline-flex items-center text-sm px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white"
-          >
-            🔬 Try this concept in the Playground →
-          </Link>
+          <div>
+            {nextLesson && (
+              <Link
+                href={`/lessons/${nextLesson.id}`}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 text-xs hover:bg-slate-700"
+              >
+                Next: {nextLesson.title} →
+              </Link>
+            )}
+          </div>
         </div>
-      </main>
-    </>
+      </div>
+    </main>
   );
 }
