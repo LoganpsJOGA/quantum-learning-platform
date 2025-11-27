@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import TopNav from "../TopNav";
-import presets from "../../src/data/playgroundPresets";
+import { presets } from "../../src/data/playgroundPresets";
 
 export default function PlaygroundClient() {
   const searchParams = useSearchParams();
