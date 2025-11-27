@@ -1,8 +1,12 @@
 // app/page.js
 
+import TopNav from "./TopNav";
+
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center">
+     <TopNav />
       <header className="w-full max-w-5xl flex justify-between items-center py-6 px-4">
         <div className="text-2xl font-bold tracking-tight">
           Quantum<span className="text-indigo-400">OS</span>

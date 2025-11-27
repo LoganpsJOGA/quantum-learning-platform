@@ -1,5 +1,6 @@
 "use client";
 
+import TopNav from "../TopNav";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { lessons } from "../../data/lessons";
@@ -46,6 +47,7 @@ export default function LessonsPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
+     <TopNav />
       <div className="mx-auto max-w-5xl px-4 py-10">
         <header className="mb-8">
           <h1 className="text-3xl font-bold mb-2">
