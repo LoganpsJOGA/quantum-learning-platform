@@ -1,200 +1,200 @@
 "use client";
 
-import TopNav from "../TopNav";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { lessons } from "../../data/lessons";
+import { useRouter } from "next/navigation";
+import { lessons } from "../../src/data/lessons";
+
+const TAG_COMPACT_LIMIT = 24; // how many tags to show before "More…"
+
+function getAllTags() {
+  const tagSet = new Set();
+  lessons.forEach((lesson) => {
+    (lesson.tags || []).forEach((t) => tagSet.add(t));
+  });
+  return Array.from(tagSet).sort();
+}
 
 export default function LessonsPage() {
+  const router = useRouter();
   const [activeTag, setActiveTag] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [showAllTags, setShowAllTags] = useState(false);
 
-  // Collect all unique tags from lessons
-  const allTags = useMemo(() => {
-    const set = new Set();
-    lessons.forEach((lesson) => {
-      (lesson.tags || []).forEach((tag) => set.add(tag));
-    });
-    return Array.from(set).sort();
-  }, []);
+  const allTags = useMemo(() => getAllTags(), []);
+  const visibleTags = showAllTags
+    ? allTags
+    : allTags.slice(0, TAG_COMPACT_LIMIT);
+  const hasHiddenTags = allTags.length > TAG_COMPACT_LIMIT;
 
   const filteredLessons = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
     return lessons.filter((lesson) => {
-      // Tag filter
-      if (activeTag !== "all") {
-        if (!lesson.tags || !lesson.tags.includes(activeTag)) {
-          return false;
-        }
+      // tag filter
+      if (activeTag !== "all" && !lesson.tags?.includes(activeTag)) {
+        return false;
       }
 
-      // Search filter
       if (!term) return true;
 
-      const haystackParts = [
-        lesson.id,
+      const haystack = [
         lesson.title,
         lesson.level,
-        (lesson.tags || []).join(" "),
-        lesson.content?.slice(0, 300) || "",
-      ];
+        lesson.id,
+        ...(lesson.tags || []),
+        lesson.content || "",
+      ]
+        .join(" ")
+        .toLowerCase();
 
-      const haystack = haystackParts.join(" ").toLowerCase();
       return haystack.includes(term);
     });
   }, [activeTag, searchTerm]);
 
+  const handleViewLesson = (id) => {
+    router.push(`/lessons/${id}`);
+  };
+
+  const handleGoPlayground = (preset) => {
+    if (!preset) {
+      router.push("/playground");
+    } else {
+      router.push(`/playground?preset=${encodeURIComponent(preset)}`);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
-     <TopNav />
-      <div className="mx-auto max-w-5xl px-4 py-10">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">
-            Quantum Lessons
-          </h1>
-          <p className="text-slate-300">
-            Browse, search, and filter lessons on quantum computing —
-            from bits and qubits to algorithms and hardware.
-          </p>
-        </header>
-
-        {/* Search + tag filters */}
-        <section className="mb-8 space-y-4">
-          {/* Search bar */}
+      <div className="max-w-6xl mx-auto px-4 py-10 space-y-6">
+        {/* Header row with title + search + main-menu button */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Search lessons
-            </label>
+            <h1 className="text-3xl font-semibold">All lessons</h1>
+            <p className="text-slate-400 text-sm mt-1">
+              Browse focused lessons on core quantum computing ideas.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+            {/* Search bar */}
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by title, topic, tag, or level (e.g. “Grover”, “entanglement”, “beginner”)"
-              className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              placeholder="Search lessons by title, topic, or text…"
+              className="w-full md:w-80 rounded-xl bg-slate-900/80 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
+
+            {/* Return to main menu */}
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center rounded-xl bg-slate-800 px-3 py-2 text-xs font-medium text-slate-100 hover:bg-slate-700 transition"
+            >
+              ← Return to main menu
+            </Link>
           </div>
+        </div>
 
-          {/* Tag filter row */}
-          <div>
-            <div className="flex flex-wrap gap-2 items-center">
-              <span className="text-xs uppercase tracking-wide text-slate-400">
-                Filter by tag:
-              </span>
+        {/* Tag filters row (compact + “More…”) */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setActiveTag("all")}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+                activeTag === "all"
+                  ? "bg-purple-600 text-white border-transparent"
+                  : "bg-slate-900 text-slate-200 border-slate-700 hover:border-purple-500"
+              }`}
+            >
+              All topics
+            </button>
 
+            {visibleTags.map((tag) => (
               <button
-                type="button"
-                onClick={() => setActiveTag("all")}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                  activeTag === "all"
-                    ? "bg-violet-600 border-violet-500 text-white"
-                    : "bg-slate-900 border-slate-700 text-slate-200 hover:border-violet-500"
+                key={tag}
+                onClick={() => setActiveTag(tag)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+                  activeTag === tag
+                    ? "bg-purple-600 text-white border-transparent"
+                    : "bg-slate-900 text-slate-300 border-slate-700 hover:border-purple-500"
                 }`}
               >
-                All
+                {tag}
               </button>
+            ))}
 
-              {allTags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => setActiveTag(tag)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                    activeTag === tag
-                      ? "bg-violet-600 border-violet-500 text-white"
-                      : "bg-slate-900 border-slate-700 text-slate-200 hover:border-violet-500"
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
+            {hasHiddenTags && !showAllTags && (
+              <button
+                onClick={() => setShowAllTags(true)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium border bg-slate-900 text-slate-300 border-slate-700 hover:border-purple-500"
+              >
+                … etc
+              </button>
+            )}
 
-            <p className="mt-2 text-xs text-slate-400">
-              Showing{" "}
-              <span className="font-semibold text-slate-200">
-                {filteredLessons.length}
-              </span>{" "}
-              of{" "}
-              <span className="font-semibold text-slate-200">
-                {lessons.length}
-              </span>{" "}
-              lessons
-              {activeTag !== "all" && (
-                <>
-                  {" "}
-                  with tag <span className="font-mono">#{activeTag}</span>
-                </>
-              )}
-              {searchTerm.trim() && (
-                <>
-                  {" "}
-                  matching <span className="italic">“{searchTerm.trim()}”</span>
-                </>
-              )}
-              .
-            </p>
+            {hasHiddenTags && showAllTags && (
+              <button
+                onClick={() => setShowAllTags(false)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium border bg-slate-900 text-slate-400 border-slate-700 hover:border-purple-500"
+              >
+                Show fewer
+              </button>
+            )}
           </div>
-        </section>
+
+          {activeTag !== "all" && (
+            <p className="text-xs text-slate-500">
+              Filtering by tag: <span className="font-semibold">{activeTag}</span>
+            </p>
+          )}
+        </div>
 
         {/* Lessons grid */}
-        <section className="grid gap-4 md:grid-cols-2">
-          {filteredLessons.map((lesson, index) => (
-            <Link
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredLessons.map((lesson) => (
+            <article
               key={lesson.id}
-              href={`/lessons/${lesson.id}`}
-              className="block rounded-2xl bg-slate-900 border border-slate-800 hover:border-violet-500 hover:bg-slate-900/80 transition p-5"
+              className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-sm shadow-slate-900/40"
             >
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs uppercase tracking-wide text-slate-400">
-                  Lesson {index + 1}
+              <div className="space-y-2">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                  Lesson {lesson.number ?? "?"}
                 </p>
-                <span className="inline-flex items-center rounded-full bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-200">
-                  {lesson.level || "Unlabeled"}
-                </span>
+                <h2 className="text-base font-semibold">{lesson.title}</h2>
+                <p className="text-xs text-slate-400">
+                  Level: {lesson.level || "Unknown"}
+                </p>
+                <p className="mt-2 text-xs text-slate-300 line-clamp-4">
+                  {lesson.summary || lesson.content?.slice(0, 220) || ""}
+                </p>
               </div>
 
-              <h2 className="text-lg font-semibold mb-1">
-                {lesson.title}
-              </h2>
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <button
+                  onClick={() => handleViewLesson(lesson.id)}
+                  className="inline-flex items-center justify-center rounded-xl bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-100 hover:bg-slate-700 transition"
+                >
+                  View lesson →
+                </button>
 
-              {lesson.tags?.length ? (
-                <div className="mb-2 flex flex-wrap gap-1">
-                  {lesson.tags.slice(0, 4).map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                  {lesson.tags.length > 4 && (
-                    <span className="text-[11px] text-slate-400">
-                      +{lesson.tags.length - 4} more
-                    </span>
-                  )}
-                </div>
-              ) : null}
-
-              <p className="text-sm text-slate-300 line-clamp-3">
-                {lesson.content
-                  ?.replace(/\s+/g, " ")
-                  .trim()
-                  .slice(0, 180) || "Click to read this lesson."}
-                {lesson.content && lesson.content.length > 180 ? "…" : ""}
-              </p>
-            </Link>
+                <button
+                  onClick={() => handleGoPlayground(lesson.preset)}
+                  className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-slate-200 border border-slate-700 hover:border-purple-500 transition"
+                >
+                  🎮 Playground
+                </button>
+              </div>
+            </article>
           ))}
 
           {filteredLessons.length === 0 && (
-            <div className="col-span-full rounded-xl border border-dashed border-slate-700 bg-slate-900/60 p-6 text-center text-slate-300">
-              <p className="font-medium mb-1">No lessons match that filter.</p>
-              <p className="text-sm text-slate-400">
-                Try clearing the search box or switching tags.
-              </p>
-            </div>
+            <p className="text-sm text-slate-400">
+              No lessons match your filters. Try clearing the search box or
+              choosing “All topics”.
+            </p>
           )}
-        </section>
+        </div>
       </div>
     </main>
   );
