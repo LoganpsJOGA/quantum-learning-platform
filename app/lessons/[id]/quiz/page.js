@@ -2,194 +2,345 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { lessons } from "../../../../src/data/lessons";
+import TopNav from "../../../TopNav";
 import { getQuizForLessonId } from "../../../../src/data/quizzes";
 
-const TOTAL_TESTS = 50; // total number of lessons/quizzes
+const PROGRESS_KEY = "quantum-quiz-progress";
+
+function loadProgress() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(PROGRESS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function saveProgress(progress) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
+    // Let TopNav + My tests know something changed
+    window.dispatchEvent(new Event("quiz-progress-updated"));
+  } catch {
+    // ignore
+  }
+}
+
+// simple in-place shuffle
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
 
 export default function LessonQuizPage() {
   const params = useParams();
   const router = useRouter();
-  const lessonId = params?.id;
+  const slug = params?.id; // e.g. "bit-vs-qubit"
 
-  const lesson = useMemo(
-    () => lessons.find((l) => l.id === lessonId),
-    [lessonId]
-  );
+  // Full hard-mode question bank for this lesson
+  const baseQuiz = useMemo(() => {
+    if (!slug) return null;
+    return getQuizForLessonId(slug);
+  }, [slug]);
 
-  const quiz = useMemo(
-    () => getQuizForLessonId(lessonId),
-    [lessonId]
-  );
-
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedIndex, setSelectedIndex] = useState(null);
-  const [lockedIn, setLockedIn] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [attemptedCount, setAttemptedCount] = useState(0);
-  const [showResults, setShowResults] = useState(false);
-
-  // Safety: if quiz is missing or empty, bail out nicely.
-  const TOTAL_QUESTIONS = Array.isArray(quiz) ? quiz.length : 0;
+  // Progress info for this slug (to know if quiz is locked)
+  const [progressForSlug, setProgressForSlug] = useState(null);
+  const [isLocked, setIsLocked] = useState(false);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !slug) return;
+    const all = loadProgress();
+    const p = all[slug];
+    setProgressForSlug(p || null);
+    setIsLocked(p?.isPerfect === true);
+  }, [slug]);
+
+  // Local quiz state (interactive run = 3 questions chosen from baseQuiz)
+  const [quiz, setQuiz] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(null);
+  const [hasSubmittedCurrent, setHasSubmittedCurrent] = useState(false);
+  const [wasCurrentCorrect, setWasCurrentCorrect] = useState(false);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [showResults, setShowResults] = useState(false);
+  const [resultIsPerfect, setResultIsPerfect] = useState(false);
+
+  // Build a 3-question quiz (shuffled) whenever baseQuiz changes
+  useEffect(() => {
+    if (!baseQuiz || baseQuiz.length === 0) {
+      setQuiz([]);
+      setCurrentIndex(0);
+      setSelectedIndex(null);
+      setHasSubmittedCurrent(false);
+      setWasCurrentCorrect(false);
+      setCorrectCount(0);
+      setShowResults(false);
+      setResultIsPerfect(false);
+      return;
+    }
+
+    // Only build the interactive quiz if this lesson is NOT locked
+    if (isLocked) return;
+
+    const copy = [...baseQuiz];
+    shuffle(copy);
+    const truncated = copy.slice(0, 3);
+
+    setQuiz(truncated);
     setCurrentIndex(0);
     setSelectedIndex(null);
-    setLockedIn(false);
+    setHasSubmittedCurrent(false);
+    setWasCurrentCorrect(false);
     setCorrectCount(0);
-    setAttemptedCount(0);
     setShowResults(false);
-  }, [lessonId]);
+    setResultIsPerfect(false);
+  }, [baseQuiz, isLocked]);
 
-  if (!lesson || !TOTAL_QUESTIONS) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 flex flex-col items-center justify-center">
-        <p className="mb-4 text-lg">
-          Sorry, this quiz couldn&apos;t be loaded.
-        </p>
-        <Link
-          href="/lessons"
-          className="px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-sm font-medium"
-        >
-          Back to lessons
-        </Link>
-      </main>
-    );
-  }
-
-  const question = quiz[Math.min(currentIndex, TOTAL_QUESTIONS - 1)];
+  const TOTAL_QUESTIONS = quiz.length;
+  const question = TOTAL_QUESTIONS > 0 ? quiz[currentIndex] : null;
 
   function handleSelect(idx) {
-    if (lockedIn) return;
+    if (hasSubmittedCurrent) return;
     setSelectedIndex(idx);
   }
 
-  function handleDeselect() {
-    if (lockedIn) return;
-    setSelectedIndex(null);
+  function handleSubmit() {
+    if (!question || selectedIndex == null || hasSubmittedCurrent) return;
+
+    const isCorrect = selectedIndex === question.correctIndex;
+    setWasCurrentCorrect(isCorrect);
+    setHasSubmittedCurrent(true);
+    setCorrectCount((prev) => prev + (isCorrect ? 1 : 0));
   }
 
-  function handleSubmitAnswer() {
-    if (selectedIndex === null || lockedIn) return;
+  function finishQuiz(finalCorrectCount) {
+    const isPerfect = finalCorrectCount === TOTAL_QUESTIONS;
+    setShowResults(true);
+    setResultIsPerfect(isPerfect);
 
-    setLockedIn(true);
-    setAttemptedCount((prev) => prev + 1);
+    if (!slug) return;
 
-    if (selectedIndex === question.correctIndex) {
-      setCorrectCount((prev) => prev + 1);
+    const all = loadProgress();
+    const prev = all[slug] || {
+      attempts: 0,
+      isPerfect: false
+    };
+
+    const updated = {
+      attempts: (prev.attempts ?? 0) + 1,
+      lastScore: finalCorrectCount,
+      totalQuestions: TOTAL_QUESTIONS,
+      isPerfect: isPerfect || prev.isPerfect === true,
+      lastUpdated: new Date().toISOString()
+    };
+
+    all[slug] = updated;
+    saveProgress(all);
+    setProgressForSlug(updated);
+    if (updated.isPerfect) {
+      setIsLocked(true);
     }
   }
 
-  function handleNext() {
-    if (!lockedIn) return;
+  function handleContinue() {
+    if (!hasSubmittedCurrent) return;
+    const isLast = currentIndex === TOTAL_QUESTIONS - 1;
 
-    if (currentIndex + 1 < TOTAL_QUESTIONS) {
-      setCurrentIndex((prev) => prev + 1);
-      setSelectedIndex(null);
-      setLockedIn(false);
+    if (isLast) {
+      finishQuiz(correctCount);
     } else {
-      // Finished all questions
-      setShowResults(true);
-
-      // If perfect score, store completion in localStorage
-      if (correctCount + (selectedIndex === question.correctIndex ? 1 : 0) === TOTAL_QUESTIONS) {
-        try {
-          const raw = localStorage.getItem("quizProgress");
-          const progress = raw ? JSON.parse(raw) : {};
-          progress[lessonId] = {
-            completed: true,
-            score: TOTAL_QUESTIONS
-          };
-          localStorage.setItem("quizProgress", JSON.stringify(progress));
-        } catch (e) {
-          console.error("Failed to save quiz progress", e);
-        }
-      }
+      setCurrentIndex((idx) => idx + 1);
+      setSelectedIndex(null);
+      setHasSubmittedCurrent(false);
+      setWasCurrentCorrect(false);
     }
   }
 
-  function handleRetry() {
-    // Shuffle question order for retry
-    const shuffled = [...quiz].sort(() => Math.random() - 0.5);
-    // we can't mutate quiz (useMemo result) directly, but we can just
-    // restart the page using router.refresh() which will regenerate the quiz order
-    // or simply reload:
-    if (typeof window !== "undefined") {
-      window.location.reload();
+  function handleBackToLesson() {
+    if (!slug) {
+      router.push("/lessons");
+    } else {
+      router.push(`/lessons/${slug}`);
     }
   }
 
-  const finalScore =
-    showResults && lockedIn
-      ? correctCount
-      : correctCount + (lockedIn && selectedIndex === question.correctIndex ? 1 : 0);
-
-  const perfect = showResults && finalScore === TOTAL_QUESTIONS;
-
-  return (
-    <main className="min-h-screen bg-slate-950 text-slate-50">
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-        <header className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-slate-400">Quiz</p>
-            <h1 className="text-2xl font-semibold">
-              {lesson.title}
+  // If no quiz exists for this lesson, show "not available"
+  if (!baseQuiz || baseQuiz.length === 0) {
+    return (
+      <>
+        <TopNav />
+        <main className="min-h-screen bg-slate-950 text-slate-50">
+          <div className="max-w-3xl mx-auto px-4 pt-16 pb-24">
+            <h1 className="text-2xl font-semibold mb-4">
+              Quiz not available for this lesson (yet)
             </h1>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href={`/lessons/${lessonId}`}
-              className="px-4 py-2 rounded-full bg-slate-800 hover:bg-slate-700 text-sm"
+            <p className="text-sm text-slate-300 mb-6">
+              We couldn&apos;t load quiz questions for{" "}
+              <code className="px-1.5 py-0.5 rounded bg-slate-900/70 text-xs">
+                {slug}
+              </code>
+              . Once a quiz is written and added to <code>src/data/quizzes.js</code>,
+              it will appear here.
+            </p>
+            <button
+              onClick={handleBackToLesson}
+              className="px-4 py-2 rounded-full border border-slate-600 text-sm hover:bg-slate-800 transition"
             >
               ← Return to lesson
-            </Link>
-            <Link
-              href="/lessons"
-              className="px-4 py-2 rounded-full bg-slate-800 hover:bg-slate-700 text-sm"
-            >
-              All lessons
-            </Link>
-            <Link
-              href="/"
-              className="px-4 py-2 rounded-full bg-slate-800 hover:bg-slate-700 text-sm"
-            >
-              Main menu
-            </Link>
+            </button>
           </div>
-        </header>
+        </main>
+      </>
+    );
+  }
 
-        {!showResults && (
-          <section className="space-y-6">
-            <div className="flex items-center justify-between text-sm text-slate-400">
-              <span>
-                Question {currentIndex + 1} of {TOTAL_QUESTIONS}
-              </span>
-              <span>Correct so far: {correctCount}</span>
-            </div>
+  // If quiz is already PERFECT for this lesson and we are not currently
+  // showing a fresh result, show locked read-only view.
+  if (isLocked && !showResults) {
+    return (
+      <>
+        <TopNav />
+        <main className="min-h-screen bg-slate-950 text-slate-50">
+          <div className="max-w-3xl mx-auto px-4 pt-16 pb-24 space-y-8">
+            <header className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                Lesson quiz
+              </p>
+              <h1 className="text-2xl font-semibold">
+                {slug?.replace(/-/g, " ") || "Lesson quiz"}
+              </h1>
+              <p className="text-sm text-emerald-300">
+                You&apos;ve already completed this quiz with a perfect score.
+                It&apos;s now locked. You can review the questions and correct
+                answers below.
+              </p>
+            </header>
 
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 space-y-4">
-              <p className="text-base font-medium">{question.question}</p>
+            <section className="space-y-6">
+              {baseQuiz.map((q, qi) => (
+                <div
+                  key={qi}
+                  className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 space-y-3"
+                >
+                  <p className="text-xs text-slate-400 mb-1">
+                    Question {qi + 1}
+                  </p>
+                  <p className="text-sm font-medium leading-relaxed">
+                    {q.question}
+                  </p>
+                  <ul className="space-y-2">
+                    {q.choices.map((choice, idx) => {
+                      const isCorrect = idx === q.correctIndex;
+                      return (
+                        <li
+                          key={idx}
+                          className={[
+                            "px-4 py-2 rounded-xl border text-sm",
+                            isCorrect
+                              ? "border-emerald-400 bg-emerald-500/10"
+                              : "border-slate-700 bg-slate-900"
+                          ].join(" ")}
+                        >
+                          <span className="font-mono mr-3 text-xs text-slate-400">
+                            {["A", "B", "C", "D"][idx]}.
+                          </span>
+                          {choice}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </section>
+
+            <button
+              type="button"
+              onClick={handleBackToLesson}
+              className="px-4 py-2 rounded-full border border-slate-700 text-xs hover:bg-slate-900"
+            >
+              ← Return to lesson
+            </button>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // Normal interactive quiz UI
+  return (
+    <>
+      <TopNav />
+      <main className="min-h-screen bg-slate-950 text-slate-50">
+        <div className="max-w-3xl mx-auto px-4 pt-16 pb-24 space-y-8">
+          <header className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+              Lesson quiz
+            </p>
+            <h1 className="text-2xl font-semibold">
+              {slug?.replace(/-/g, " ") || "Lesson quiz"}
+            </h1>
+            <p className="text-sm text-slate-300">
+              Answer {TOTAL_QUESTIONS} hard-mode questions based on this lesson.
+            </p>
+          </header>
+
+          {!showResults && question && (
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-6">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>
+                  Question {currentIndex + 1} / {TOTAL_QUESTIONS}
+                </span>
+              </div>
+
+              <p className="text-sm font-medium leading-relaxed">
+                {question.question}
+              </p>
 
               <div className="space-y-2">
                 {question.choices.map((choice, idx) => {
-                  const isSelected = idx === selectedIndex;
-                  const isCorrect = idx === question.correctIndex;
+                  const isSelected = selectedIndex === idx;
 
-                  let bg = "bg-slate-800/80";
-                  if (lockedIn && isCorrect) bg = "bg-emerald-700/80";
-                  else if (lockedIn && isSelected && !isCorrect) bg = "bg-rose-800/80";
-                  else if (isSelected) bg = "bg-indigo-700/80";
+                  let stateClasses = "";
+                  if (hasSubmittedCurrent) {
+                    const isCorrectChoice = idx === question.correctIndex;
+                    const isUserChoice = idx === selectedIndex;
+
+                    if (isCorrectChoice) {
+                      stateClasses =
+                        "border-emerald-400 bg-emerald-500/10 text-emerald-50";
+                    } else if (isUserChoice && !isCorrectChoice) {
+                      stateClasses =
+                        "border-rose-400 bg-rose-500/10 text-rose-50";
+                    } else {
+                      stateClasses = "border-slate-700 bg-slate-900";
+                    }
+                  } else {
+                    if (isSelected) {
+                      stateClasses =
+                        "border-indigo-400 bg-indigo-500/10 text-indigo-50";
+                    } else {
+                      stateClasses =
+                        "border-slate-700 hover:border-slate-500 hover:bg-slate-900";
+                    }
+                  }
 
                   return (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => handleSelect(idx)}
-                      disabled={lockedIn}
-                      className={`w-full text-left rounded-xl px-4 py-3 text-sm border border-slate-700 transition-colors ${bg}`}
+                      disabled={hasSubmittedCurrent}
+                      className={[
+                        "w-full text-left px-4 py-3 rounded-xl border text-sm transition disabled:cursor-default",
+                        stateClasses
+                      ].join(" ")}
                     >
-                      <span className="font-mono mr-2">
+                      <span className="font-mono mr-3 text-xs text-slate-400">
                         {["A", "B", "C", "D"][idx]}.
                       </span>
                       {choice}
@@ -198,104 +349,119 @@ export default function LessonQuizPage() {
                 })}
               </div>
 
-              <div className="flex flex-wrap gap-3 pt-2">
-                {!lockedIn && (
+              {hasSubmittedCurrent &&
+                selectedIndex != null &&
+                question.explanationsByChoice &&
+                question.explanationsByChoice[selectedIndex] && (
+                  <p
+                    className={[
+                      "mt-2 text-xs",
+                      wasCurrentCorrect
+                        ? "text-emerald-300"
+                        : "text-rose-300"
+                    ].join(" ")}
+                  >
+                    {question.explanationsByChoice[selectedIndex]}
+                  </p>
+                )}
+
+              <div className="flex justify-between items-center pt-3">
+                {!hasSubmittedCurrent ? (
                   <>
                     <button
                       type="button"
-                      onClick={handleDeselect}
-                      disabled={selectedIndex === null}
-                      className="px-4 py-2 rounded-full border border-slate-700 text-xs text-slate-300 disabled:opacity-50"
+                      onClick={() => setSelectedIndex(null)}
+                      className="text-xs text-slate-400 hover:text-slate-200"
                     >
-                      De-select
+                      Clear selection
                     </button>
                     <button
                       type="button"
-                      onClick={handleSubmitAnswer}
-                      disabled={selectedIndex === null}
-                      className="px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-xs font-medium disabled:opacity-50"
+                      onClick={handleSubmit}
+                      disabled={selectedIndex == null}
+                      className="px-4 py-2 rounded-full bg-indigo-500 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-400 transition"
                     >
-                      Submit answer
+                      {currentIndex === TOTAL_QUESTIONS - 1
+                        ? "Submit final answer"
+                        : "Submit answer"}
                     </button>
                   </>
-                )}
-
-                {lockedIn && (
+                ) : (
                   <button
                     type="button"
-                    onClick={handleNext}
-                    className="px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-xs font-medium"
+                    onClick={handleContinue}
+                    className="ml-auto px-4 py-2 rounded-full bg-slate-100 text-slate-900 text-xs font-semibold hover:bg-white transition"
                   >
-                    {currentIndex + 1 < TOTAL_QUESTIONS ? "Next question →" : "View results →"}
+                    {currentIndex === TOTAL_QUESTIONS - 1
+                      ? "View results →"
+                      : "Continue →"}
                   </button>
                 )}
               </div>
+            </section>
+          )}
 
-              {lockedIn && (
-                <p className="mt-3 text-xs text-slate-300">
-                  {selectedIndex === question.correctIndex
-                    ? "Nice! That answer is correct 🎉"
-                    : question.explanation}
+          {showResults && (
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 space-y-4">
+              <h2 className="text-lg font-semibold">Quiz results</h2>
+              <p className="text-sm">
+                You scored{" "}
+                <span className="font-semibold">
+                  {correctCount} / {TOTAL_QUESTIONS}
+                </span>
+                .
+              </p>
+              {resultIsPerfect ? (
+                <p className="text-sm text-emerald-300">
+                  Perfect score! 🏅 You&apos;ve earned the expert badge for this
+                  lesson. This quiz is now locked and you cannot retake it, but
+                  you can always review the questions.
+                </p>
+              ) : (
+                <p className="text-sm text-amber-300">
+                  You need a 3/3 score to get full credit. You can retry this
+                  test as many times as you want with the questions reshuffled.
                 </p>
               )}
+
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleBackToLesson}
+                  className="px-4 py-2 rounded-full border border-slate-700 text-xs hover:bg-slate-900"
+                >
+                  ← Return to lesson
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/my-tests")}
+                  className="px-4 py-2 rounded-full border border-slate-700 text-xs hover:bg-slate-900"
+                >
+                  View my tests
+                </button>
+                {!resultIsPerfect && !isLocked && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // fresh retry
+                      setIsLocked(false);
+                      setShowResults(false);
+                      setHasSubmittedCurrent(false);
+                      setWasCurrentCorrect(false);
+                      setSelectedIndex(null);
+                      setCorrectCount(0);
+                      // quiz will be rebuilt by useEffect
+                    }}
+                    className="px-4 py-2 rounded-full bg-indigo-500 text-xs font-semibold hover:bg-indigo-400"
+                  >
+                    🔁 Retry test
+                  </button>
+                )}
+              </div>
             </section>
-          </section>
-        )}
-
-        {showResults && (
-          <section className="space-y-6">
-            <div
-              className={`rounded-2xl border p-6 ${
-                perfect
-                  ? "border-emerald-600 bg-emerald-900/40"
-                  : "border-rose-600 bg-rose-900/40"
-              }`}
-            >
-              <h2 className="text-xl font-semibold mb-2">
-                {perfect
-                  ? `You scored ${TOTAL_QUESTIONS}/${TOTAL_QUESTIONS}.`
-                  : `You scored ${finalScore} / ${TOTAL_QUESTIONS}.`}
-              </h2>
-              <p className="text-sm text-slate-100">
-                {perfect
-                  ? "Excellent work! You’ve mastered this lesson’s quiz. Your completion bar has been updated."
-                  : "You need a 3/3 score to get full credit. You can retry this test as many times as you want with the questions shuffled."}
-              </p>
-            </div>
-
-            {!perfect && (
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-sm font-medium"
-              >
-                🔁 Retry test
-              </button>
-            )}
-
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={`/lessons/${lessonId}`}
-                className="px-4 py-2 rounded-full bg-slate-800 hover:bg-slate-700 text-sm"
-              >
-                ← Return to lesson
-              </Link>
-              <Link
-                href="/my-tests"
-                className="px-4 py-2 rounded-full bg-slate-800 hover:bg-slate-700 text-sm"
-              >
-                View my tests
-              </Link>
-              <Link
-                href="/"
-                className="px-4 py-2 rounded-full bg-slate-800 hover:bg-slate-700 text-sm"
-              >
-                Main menu
-              </Link>
-            </div>
-          </section>
-        )}
-      </div>
-    </main>
+          )}
+        </div>
+      </main>
+    </>
   );
 }

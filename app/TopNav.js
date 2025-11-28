@@ -1,44 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { lessons } from "../src/data/lessons";
 
-const TOTAL_TESTS = 50; // total number of quizzes/lessons
+const PROGRESS_KEY = "quantum-quiz-progress";
+
+function loadProgress() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(PROGRESS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
 
 export default function TopNav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const totalTests = lessons.length || 50;
   const [completedCount, setCompletedCount] = useState(0);
+  const [percent, setPercent] = useState(0);
 
-  // Load quiz completion from localStorage
   useEffect(() => {
-    function loadProgress() {
-      try {
-        const raw = localStorage.getItem("quizProgress");
-        if (!raw) {
-          setCompletedCount(0);
-          return;
+    function refresh() {
+      const progress = loadProgress();
+      let completed = 0;
+
+      for (const lesson of lessons) {
+        // Use id as the main key; fall back to slug if you ever add it
+        const key = lesson.id || lesson.slug;
+        if (!key) continue;
+
+        const p = progress[key];
+        if (p && p.isPerfect) {
+          completed += 1;
         }
-        const progress = JSON.parse(raw);
-
-        const done = Object.values(progress).filter(
-          (entry) => entry && entry.completed
-        ).length;
-
-        setCompletedCount(done);
-      } catch (e) {
-        console.error("Failed to read quiz progress", e);
-        setCompletedCount(0);
       }
+
+      setCompletedCount(completed);
+      const pctRaw = (completed / totalTests) * 100;
+      const pct = Math.round(pctRaw); // 50 tests → 2% per completed test
+      setPercent(pct);
     }
 
-    loadProgress();
-    window.addEventListener("storage", loadProgress);
-    return () => window.removeEventListener("storage", loadProgress);
-  }, []);
+    refresh();
 
-  const percent = TOTAL_TESTS ? (completedCount / TOTAL_TESTS) * 100 : 0;
+    if (typeof window !== "undefined") {
+      window.addEventListener("quiz-progress-updated", refresh);
+      return () =>
+        window.removeEventListener("quiz-progress-updated", refresh);
+    }
+  }, [totalTests]);
+
+  const testsLabel = `TESTS COMPLETED ${completedCount}/${totalTests} (${percent}%)`;
+  const barWidth = `${percent}%`;
 
   const navItems = [
     { href: "/", label: "Home" },
@@ -49,58 +69,57 @@ export default function TopNav() {
   ];
 
   return (
-    <header className="w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-slate-900 bg-slate-950/90 backdrop-blur">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* Left: logo + nav */}
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold">
-              Q
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="text-xs text-slate-400">Learn Quantum</span>
-              <span className="text-sm font-semibold text-slate-50">
-                QuantumOS
-              </span>
-            </div>
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-3">
-            {navItems.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    active
-                      ? "bg-indigo-600 text-white"
-                      : "bg-slate-900 text-slate-200 hover:bg-slate-800"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Right: tests completed bar */}
-        <div className="flex items-center gap-3">
-          <div className="text-xs text-slate-300 whitespace-nowrap">
-            TESTS COMPLETED{" "}
-            <span className="font-semibold">
-              {completedCount}/{TOTAL_TESTS}
-            </span>{" "}
-            ({percent.toFixed(0)}%)
+        {/* Left: logo */}
+        <button
+          onClick={() => router.push("/")}
+          className="flex items-center gap-2"
+        >
+          <div className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold text-white">
+            Q
           </div>
-          <div className="w-40 h-3 rounded-full bg-slate-800 overflow-hidden">
+          <div className="flex flex-col">
+            <span className="text-xs text-slate-400">Learn Quantum</span>
+            <span className="text-sm font-semibold text-slate-50">
+              QuantumOS
+            </span>
+          </div>
+        </button>
+
+        {/* Middle: nav pills */}
+        <nav className="hidden md:flex items-center gap-2">
+          {navItems.map((item) => {
+            const active =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname?.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={[
+                  "px-3 py-1.5 rounded-full text-xs font-medium transition",
+                  active
+                    ? "bg-slate-100 text-slate-900"
+                    : "bg-slate-900 text-slate-200 hover:bg-slate-800"
+                ].join(" ")}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Right: tests progress */}
+        <div className="flex flex-col items-end gap-1 min-w-[190px]">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+            {testsLabel}
+          </span>
+          <div className="w-44 h-2 rounded-full bg-slate-900 overflow-hidden">
             <div
-              className="h-full bg-indigo-500 transition-all"
-              style={{ width: `${Math.min(percent, 100)}%` }}
+              className="h-full bg-indigo-400 transition-all duration-300"
+              style={{ width: barWidth }}
             />
           </div>
         </div>
